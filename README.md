@@ -1,7 +1,6 @@
 ## 📝 To-Do App
 This To-Do App helps users manage daily tasks with ease. It allows you to sign up or log in, add, update, delete, and mark tasks as completed, with secure authentication.
 
-
 ### 🚀 Features
 User Authentication (Login)
 Add new tasks
