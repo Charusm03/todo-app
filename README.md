@@ -16,9 +16,12 @@ Logout functionality
 
 ### 🛠️ Tech Stack
 Frontend: Flutter (Dart)
+
 Backend: Express.js (Node.js)
+
 Database: MySQL
-Authentication: JWT (if you used it, otherwise remove)
+
+Authentication: JWT
 
 ### 📂 Project Structure
 todo-app/
