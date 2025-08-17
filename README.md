@@ -1,22 +1,55 @@
-## 📝 To-Do App
-This To-Do App helps users manage daily tasks with ease. It allows you to sign up or log in, add, update, delete, and mark tasks as completed, with secure authentication.
+# 📝 To-Do App (Multi-Version Project)
 
-### 🚀 Features
-User Authentication (Login)
-Add new tasks
-Update existing tasks
-Delete tasks
-Mark tasks as completed
-Logout functionality
+This project contains two versions of a To-Do application.  
+- **Task 1**: Basic To-Do App (all users have the same permissions)  
+- **Task 2**: Role-Based To-Do App (different roles with different access rights)  
 
-### 🛠️ Tech Stack
-Frontend: Flutter (Dart)
+---
 
-Backend: Express.js (Node.js)
+## 🚀 Features
 
-Database: MySQL
+### ✅ Task 1 - Basic To-Do App
+This version helps users manage daily tasks with ease.  
+It allows you to:
+- Sign up / Log in
+- Add new tasks
+- Update existing tasks
+- Delete tasks
+- Mark tasks as completed
+- Logout securely
 
-Authentication: JWT
+---
+
+### 🔑 Task 2 - Role-Based To-Do App
+In this version, different user roles have different permissions:
+
+- **Admin** 👑  
+  - Create tasks  
+  - Edit tasks  
+  - Toggle completion (check/uncheck tasks)  
+  - Delete tasks  
+
+- **Manager** 🧑‍💼  
+  - Create tasks  
+  - Edit tasks  
+  - Toggle completion (check/uncheck tasks)  
+  - ❌ Cannot delete tasks  
+
+- **Employee** 👷  
+  - View all tasks created by Admin and Manager  
+  - ❌ Cannot create, edit, toggle, or delete  
+
+This ensures a controlled workflow and prevents unauthorized modifications.
+
+---
+
+## 🛠️ Tech Stack
+- **Frontend**: Flutter (Dart)  
+- **Backend**: Express.js (Node.js)  
+- **Database**: MySQL  
+- **Authentication**: JWT  
+
+---
 
 ### 📂 Project Structure
 todo-app/
