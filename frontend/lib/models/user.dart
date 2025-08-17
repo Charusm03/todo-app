@@ -46,17 +46,20 @@ class User {
     return true; // All users can toggle their own todos
   }
 
-  bool isAdmin() {
-    return role == 'admin';
+  /// New permission: viewing todos
+  bool canView() {
+    // Everyone can view todos, but employees can *only view*
+    return true;
   }
 
-  bool isManager() {
-    return role == 'manager';
+  /// Employees can ONLY view todos created by admins or updated by managers
+  bool canViewAdminAndManagerChanges() {
+    return role == 'employee' || role == 'manager' || role == 'admin';
   }
 
-  bool isEmployee() {
-    return role == 'employee';
-  }
+  bool isAdmin() => role == 'admin';
+  bool isManager() => role == 'manager';
+  bool isEmployee() => role == 'employee';
 
   String get displayRole {
     switch (role.toLowerCase()) {

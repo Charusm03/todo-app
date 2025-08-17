@@ -7,20 +7,19 @@ const router = express.Router();
 // All todo routes require authentication
 router.use(authenticateToken);
 
-// Get todos (role-based filtering)
+// ✅ Get todos (role-based filtering)
 router.get('/', async (req, res) => {
     try {
         let todos;
 
-        if (req.user.role === 'admin') {
-            // Admin can see all todos
+        if (req.user.role === 'admin' || req.user.role === 'manager') {
+            // Admin and Manager can see all todos
             todos = await Todo.findAll();
-        } else if (req.user.role === 'manager') {
-            // Manager can see all todos (but cannot create)
+        } else if (req.user.role === 'employee') {
+            // Employee can see ALL todos but only in read-only mode
             todos = await Todo.findAll();
         } else {
-            // Employee can only see their own todos
-            todos = await Todo.findByUserId(req.user.id);
+            return res.status(403).json({ error: 'Unauthorized role' });
         }
 
         res.json({ todos });
@@ -30,7 +29,7 @@ router.get('/', async (req, res) => {
     }
 });
 
-// Create todo (Admin only)
+// ✅ Create todo (Admin only)
 router.post('/', requireRole(['admin']), async (req, res) => {
     try {
         const { title, description } = req.body;
@@ -57,7 +56,7 @@ router.post('/', requireRole(['admin']), async (req, res) => {
     }
 });
 
-// Update todo (Admin and Manager)
+// ✅ Update todo (Admin and Manager)
 router.put('/:id', requireRole(['admin', 'manager']), async (req, res) => {
     try {
         const { id } = req.params;
@@ -95,7 +94,7 @@ router.put('/:id', requireRole(['admin', 'manager']), async (req, res) => {
     }
 });
 
-// Toggle todo completion (Admin and Manager)
+// ✅ Toggle todo completion (Admin and Manager)
 router.patch('/:id/toggle', requireRole(['admin', 'manager']), async (req, res) => {
     try {
         const { id } = req.params;
@@ -118,7 +117,7 @@ router.patch('/:id/toggle', requireRole(['admin', 'manager']), async (req, res) 
     }
 });
 
-// Delete todo (Admin and Manager)
+// ✅ Delete todo (Admin and Manager)
 router.delete('/:id', requireRole(['admin', 'manager']), async (req, res) => {
     try {
         const { id } = req.params;
