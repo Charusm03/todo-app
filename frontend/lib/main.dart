@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'services/auth_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/todo_screen.dart';
 
@@ -13,76 +13,60 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Todo App',
+      title: 'RBAC Todo App',
       theme: ThemeData(
         primarySwatch: Colors.blue,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
+        useMaterial3: true,
       ),
-      home: const SplashScreen(),
+      home: const AuthWrapper(),
       debugShowCheckedModeBanner: false,
     );
   }
 }
 
-class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+class AuthWrapper extends StatefulWidget {
+  const AuthWrapper({super.key});
 
   @override
-  _SplashScreenState createState() => _SplashScreenState();
+  State<AuthWrapper> createState() => _AuthWrapperState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _AuthWrapperState extends State<AuthWrapper> {
+  final AuthService _authService = AuthService();
+  bool _isLoading = true;
+  bool _isLoggedIn = false;
+
   @override
   void initState() {
     super.initState();
-    _checkLoginStatus();
+    _checkAuthStatus();
   }
 
-  Future<void> _checkLoginStatus() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? token = prefs.getString('token');
-
-    await Future.delayed(const Duration(seconds: 2));
-
-    if (!mounted) return;
-
-    if (token != null) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const TodoScreen()),
-      );
-    } else {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-      );
+  Future<void> _checkAuthStatus() async {
+    try {
+      bool loggedIn = await _authService.isLoggedIn();
+      setState(() {
+        _isLoggedIn = loggedIn;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _isLoggedIn = false;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.check_circle,
-              size: 100,
-              color: Colors.blue,
-            ),
-            SizedBox(height: 20),
-            Text(
-              'Todo App',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue,
-              ),
-            ),
-            SizedBox(height: 20),
-            CircularProgressIndicator(),
-          ],
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
         ),
-      ),
-    );
+      );
+    }
+
+    return _isLoggedIn ? const TodoScreen() : const LoginScreen();
   }
 }

@@ -1,111 +1,209 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../models/user.dart';
+import '../models/todo.dart';
+import '../services/auth_service.dart';
 import '../services/api_service.dart';
+import '../widgets/todo_item.dart';
 import 'login_screen.dart';
 
 class TodoScreen extends StatefulWidget {
-  const TodoScreen({Key? key}) : super(key: key);
+  const TodoScreen({super.key});
 
   @override
-  _TodoScreenState createState() => _TodoScreenState();
+  State<TodoScreen> createState() => _TodoScreenState();
 }
 
 class _TodoScreenState extends State<TodoScreen> {
-  List<dynamic> todos = [];
-  String username = '';
-  bool isLoading = true;
+  final _authService = AuthService();
+  final _titleController = TextEditingController();
+  final _descriptionController = TextEditingController();
+
+  User? _currentUser;
+  List<Todo> _todos = [];
+  bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
-    _loadTodos();
+    _loadData();
   }
 
-  Future<void> _loadUserData() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    setState(() {
-      username = prefs.getString('username') ?? '';
-    });
+  Future<void> _loadData() async {
+    try {
+      final user = await _authService.getCurrentUser();
+      if (user != null) {
+        setState(() {
+          _currentUser = user;
+        });
+        await _loadTodos();
+      } else {
+        _handleLogout();
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Failed to load user data';
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _loadTodos() async {
-    setState(() => isLoading = true);
-    List<dynamic> fetchedTodos = await ApiService.getTodos();
-    if (!mounted) return;
-    setState(() {
-      todos = fetchedTodos;
-      isLoading = false;
-    });
+    try {
+      final token = await _authService.getToken();
+      if (token != null) {
+        final todos = await ApiService.getTodos(token);
+        setState(() {
+          _todos = todos;
+          _isLoading = false;
+          _errorMessage = null;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Failed to load todos';
+        _isLoading = false;
+      });
+    }
   }
 
-  Future<void> _logout() async {
-    await ApiService.logout();
-    if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
+  Future<void> _createTodo() async {
+    if (_titleController.text.trim().isEmpty) {
+      _showSnackBar('Please enter a title');
+      return;
+    }
+
+    try {
+      final token = await _authService.getToken();
+      if (token != null) {
+        await ApiService.createTodo(
+          token,
+          _titleController.text.trim(),
+          _descriptionController.text.trim(),
+        );
+
+        _titleController.clear();
+        _descriptionController.clear();
+        Navigator.of(context).pop();
+        _showSnackBar('Todo created successfully');
+        _loadTodos();
+      }
+    } catch (e) {
+      _showSnackBar(
+          'Failed to create todo: ${e.toString().replaceFirst('Exception: ', '')}');
+    }
+  }
+
+  Future<void> _updateTodo(Todo todo, String title, String description) async {
+    try {
+      final token = await _authService.getToken();
+      if (token != null) {
+        await ApiService.updateTodo(
+          token,
+          todo.id,
+          title,
+          description,
+          todo.completed,
+        );
+
+        _showSnackBar('Todo updated successfully');
+        _loadTodos();
+      }
+    } catch (e) {
+      _showSnackBar(
+          'Failed to update todo: ${e.toString().replaceFirst('Exception: ', '')}');
+    }
+  }
+
+  Future<void> _toggleTodo(Todo todo) async {
+    try {
+      final token = await _authService.getToken();
+      if (token != null) {
+        await ApiService.toggleTodo(token, todo.id);
+        _loadTodos();
+      }
+    } catch (e) {
+      _showSnackBar(
+          'Failed to toggle todo: ${e.toString().replaceFirst('Exception: ', '')}');
+    }
+  }
+
+  Future<void> _deleteTodo(Todo todo) async {
+    try {
+      final token = await _authService.getToken();
+      if (token != null) {
+        await ApiService.deleteTodo(token, todo.id);
+        _showSnackBar('Todo deleted successfully');
+        _loadTodos();
+      }
+    } catch (e) {
+      _showSnackBar(
+          'Failed to delete todo: ${e.toString().replaceFirst('Exception: ', '')}');
+    }
+  }
+
+  Future<void> _handleLogout() async {
+    await _authService.logout();
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
+    }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
     );
   }
 
-  void _showAddTodoDialog() {
-    String title = '';
-    String description = '';
-
+  void _showCreateTodoDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Add New Todo'),
+        title: const Text('Create Todo'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
+              controller: _titleController,
               decoration: const InputDecoration(
                 labelText: 'Title',
-                border: OutlineInputBorder(),
+                hintText: 'Enter todo title',
               ),
-              onChanged: (value) => title = value,
             ),
             const SizedBox(height: 16),
             TextField(
+              controller: _descriptionController,
               decoration: const InputDecoration(
                 labelText: 'Description',
-                border: OutlineInputBorder(),
+                hintText: 'Enter description (optional)',
               ),
               maxLines: 3,
-              onChanged: (value) => description = value,
             ),
           ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              _titleController.clear();
+              _descriptionController.clear();
+              Navigator.of(context).pop();
+            },
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () async {
-              if (title.isNotEmpty) {
-                Navigator.pop(context);
-                bool success = await ApiService.createTodo(title, description);
-                if (success && mounted) {
-                  _loadTodos();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Todo added successfully!')),
-                  );
-                }
-              }
-            },
-            child: const Text('Add'),
+            onPressed: _createTodo,
+            child: const Text('Create'),
           ),
         ],
       ),
     );
   }
 
-  void _showEditTodoDialog(Map<String, dynamic> todo) {
-    final titleController = TextEditingController(text: todo['title']);
-    final descriptionController =
-        TextEditingController(text: todo['description'] ?? '');
+  void _showEditTodoDialog(Todo todo) {
+    _titleController.text = todo.title;
+    _descriptionController.text = todo.description;
 
     showDialog(
       context: context,
@@ -115,18 +213,18 @@ class _TodoScreenState extends State<TodoScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
-              controller: titleController,
+              controller: _titleController,
               decoration: const InputDecoration(
                 labelText: 'Title',
-                border: OutlineInputBorder(),
+                hintText: 'Enter todo title',
               ),
             ),
             const SizedBox(height: 16),
             TextField(
-              controller: descriptionController,
+              controller: _descriptionController,
               decoration: const InputDecoration(
                 labelText: 'Description',
-                border: OutlineInputBorder(),
+                hintText: 'Enter description (optional)',
               ),
               maxLines: 3,
             ),
@@ -134,75 +232,20 @@ class _TodoScreenState extends State<TodoScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (titleController.text.isNotEmpty) {
-                Navigator.pop(context);
-                bool success = await ApiService.updateTodo(
-                  todo['id'],
-                  titleController.text,
-                  descriptionController.text,
-                  todo['is_completed'] == 1,
-                );
-                if (success && mounted) {
-                  _loadTodos();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Todo updated successfully!')),
-                  );
-                }
-              }
-            },
-            child: const Text('Update'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _deleteTodo(int todoId) async {
-    bool success = await ApiService.deleteTodo(todoId);
-    if (success && mounted) {
-      _loadTodos();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Todo deleted successfully!')),
-      );
-    }
-  }
-
-  Future<void> _toggleTodoStatus(Map<String, dynamic> todo) async {
-    bool newStatus = todo['is_completed'] != 1;
-    bool success = await ApiService.updateTodo(
-      todo['id'],
-      todo['title'],
-      todo['description'] ?? '',
-      newStatus,
-    );
-    if (success && mounted) {
-      _loadTodos();
-    }
-  }
-
-  void _showDeleteConfirmation(int todoId) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Todo'),
-        content: const Text('Are you sure you want to delete this todo?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
             onPressed: () {
-              Navigator.pop(context);
-              _deleteTodo(todoId);
+              _titleController.clear();
+              _descriptionController.clear();
+              Navigator.of(context).pop();
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => _updateTodo(
+              todo,
+              _titleController.text.trim(),
+              _descriptionController.text.trim(),
+            ),
+            child: const Text('Update'),
           ),
         ],
       ),
@@ -213,42 +256,49 @@ class _TodoScreenState extends State<TodoScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Todos'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        elevation: 0,
+        title: const Text('Todo App'),
+        centerTitle: true,
         actions: [
-          PopupMenuButton<String>(
+          PopupMenuButton<int>(
             icon: CircleAvatar(
-              backgroundColor: Colors.white,
+              backgroundColor: Colors.blue,
               child: Text(
-                username.isNotEmpty ? username[0].toUpperCase() : 'U',
-                style: const TextStyle(
-                    color: Colors.blue, fontWeight: FontWeight.bold),
+                _currentUser?.username.substring(0, 1).toUpperCase() ?? 'U',
+                style: const TextStyle(color: Colors.white),
               ),
             ),
             onSelected: (value) {
-              if (value == 'logout') {
-                _logout();
+              if (value == 1) {
+                _handleLogout();
               }
             },
             itemBuilder: (context) => [
-              PopupMenuItem(
-                enabled: false,
-                child: Row(
+              PopupMenuItem<int>(
+                enabled: false, // info only
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.person, color: Colors.grey),
-                    const SizedBox(width: 8),
-                    Text(username),
+                    Text(
+                      _currentUser?.username ?? 'User',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      _currentUser?.email ?? '',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    Text(
+                      'Role: ${_currentUser?.role?.toUpperCase() ?? ''}',
+                      style: const TextStyle(fontSize: 12, color: Colors.blue),
+                    ),
                   ],
                 ),
               ),
               const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'logout',
+              const PopupMenuItem<int>(
+                value: 1,
                 child: Row(
                   children: [
-                    Icon(Icons.logout, color: Colors.red),
+                    Icon(Icons.logout, size: 20),
                     SizedBox(width: 8),
                     Text('Logout'),
                   ],
@@ -256,164 +306,102 @@ class _TodoScreenState extends State<TodoScreen> {
               ),
             ],
           ),
+          const SizedBox(width: 8),
         ],
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.blue, Colors.blue.shade50],
-            stops: const [0.0, 0.3],
-          ),
-        ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              child: Text(
-                'Welcome back, $username!',
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(30),
-                    topRight: Radius.circular(30),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _errorMessage != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 64,
+                        color: Colors.red.shade300,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () {
+                          setState(() {
+                            _isLoading = true;
+                            _errorMessage = null;
+                          });
+                          _loadTodos();
+                        },
+                        child: const Text('Retry'),
+                      ),
+                    ],
                   ),
-                ),
-                child: isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : todos.isEmpty
-                        ? _buildEmptyState()
-                        : RefreshIndicator(
-                            onRefresh: _loadTodos,
-                            child: ListView.builder(
-                              padding: const EdgeInsets.all(16),
-                              itemCount: todos.length,
-                              itemBuilder: (context, index) {
-                                final todo = todos[index];
-                                bool isCompleted = todo['is_completed'] == 1;
-
-                                return Card(
-                                  margin: const EdgeInsets.only(bottom: 12),
-                                  elevation: 2,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: ListTile(
-                                    contentPadding: const EdgeInsets.all(16),
-                                    leading: Checkbox(
-                                      value: isCompleted,
-                                      onChanged: (_) => _toggleTodoStatus(todo),
-                                      activeColor: Colors.green,
-                                    ),
-                                    title: Text(
-                                      todo['title'],
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w500,
-                                        decoration: isCompleted
-                                            ? TextDecoration.lineThrough
-                                            : TextDecoration.none,
-                                        color: isCompleted
-                                            ? Colors.grey[600]
-                                            : Colors.black87,
-                                      ),
-                                    ),
-                                    subtitle: (todo['description'] ?? '')
-                                            .isNotEmpty
-                                        ? Padding(
-                                            padding:
-                                                const EdgeInsets.only(top: 4),
-                                            child: Text(
-                                              todo['description'],
-                                              style: TextStyle(
-                                                color: Colors.grey[600],
-                                                decoration: isCompleted
-                                                    ? TextDecoration.lineThrough
-                                                    : TextDecoration.none,
-                                              ),
-                                            ),
-                                          )
-                                        : null,
-                                    trailing: PopupMenuButton(
-                                      itemBuilder: (context) => [
-                                        PopupMenuItem(
-                                          onTap: () => Future.delayed(
-                                            Duration.zero,
-                                            () => _showEditTodoDialog(todo),
-                                          ),
-                                          child: const Row(
-                                            children: [
-                                              Icon(Icons.edit, size: 20),
-                                              SizedBox(width: 8),
-                                              Text('Edit'),
-                                            ],
-                                          ),
-                                        ),
-                                        PopupMenuItem(
-                                          onTap: () => Future.delayed(
-                                            Duration.zero,
-                                            () => _showDeleteConfirmation(
-                                                todo['id']),
-                                          ),
-                                          child: const Row(
-                                            children: [
-                                              Icon(Icons.delete,
-                                                  size: 20, color: Colors.red),
-                                              SizedBox(width: 8),
-                                              Text('Delete',
-                                                  style: TextStyle(
-                                                      color: Colors.red)),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
+                )
+              : _todos.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.task_alt,
+                            size: 64,
+                            color: Colors.grey.shade300,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'No todos yet',
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Colors.grey,
                             ),
                           ),
-              ),
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddTodoDialog,
-        backgroundColor: Colors.blue,
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _currentUser?.canCreate() == true
+                                ? 'Tap the + button to create your first todo'
+                                : 'Ask an admin to create todos',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _loadTodos,
+                      child: ListView.builder(
+                        itemCount: _todos.length,
+                        itemBuilder: (context, index) {
+                          final todo = _todos[index];
+                          return TodoItem(
+                            todo: todo,
+                            currentUser: _currentUser!,
+                            onToggle: () => _toggleTodo(todo),
+                            onEdit: () => _showEditTodoDialog(todo),
+                            onDelete: () => _deleteTodo(todo),
+                          );
+                        },
+                      ),
+                    ),
+      floatingActionButton: _currentUser?.canCreate() == true
+          ? FloatingActionButton(
+              onPressed: _showCreateTodoDialog,
+              child: const Icon(Icons.add),
+            )
+          : null,
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.assignment_outlined, size: 80, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            'No todos yet',
-            style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Tap the + button to add your first todo',
-            style: TextStyle(color: Colors.grey[500]),
-          ),
-        ],
-      ),
-    );
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
   }
 }
