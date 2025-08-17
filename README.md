@@ -22,8 +22,11 @@ Authentication: JWT (if you used it, otherwise remove)
 
 ### 📂 Project Structure
 todo-app/
+
 ├── backend/         # Express.js backend
+
 ├── frontend/        # Flutter frontend
+
 └── README.md
 
 ### ⚙️ Setup Instructions
